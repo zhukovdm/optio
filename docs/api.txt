@@ -1,0 +1,34 @@
+class Params
+    def __init__(self, acceptor: function = lambda item: item)
+    def accept(self, params: list[str] = []) -> bool
+    def get_params(self) -> list[any]
+
+class Option:
+    def __verify_short_views(self) -> None
+    def __verify_long_views(self) -> None
+    def __verify_at_least_one_view(self) -> None
+    def __verify_required(self) -> None
+    def __verify_option(self) -> None
+    def __init__(self, short_views: set[str] = set(), long_views: set[str] = set(), params: Params = Params(), default_params: list[str] = [], required: bool = False, help: str = '', description: str = '') -> Option
+    def get_short_views(self) -> set[str]
+    def get_long_views(self) -> set[str]
+    def get_views(self) -> set[str]
+    def get_params(self) -> Params
+    def get_default_params(self) -> list[any]
+    def is_required(self) -> bool
+    def set_found(self) -> None
+    def is_found(self) -> bool
+    def get_help(self) -> str
+    def get_description(self) -> str
+    def has_view(self, view: str) -> bool
+
+class Parser:
+    def __is_single_short_view(cls, view: str) -> bool
+    def __is_multiple_short_views(cls, view: str) -> bool
+    def __is_single_long_view(cls, view: str) -> bool
+    def __init__(self, options: list[Option] = []) -> Parser
+    def add_option(self, option: Option) -> Parser
+    def parse_args(self, args: list[str] = []) -> None
+    def try_get_option(self, view: str) -> Option
+    def get_all_options(self) -> list[Option]
+    def get_plain_args(self) -> list[str]
