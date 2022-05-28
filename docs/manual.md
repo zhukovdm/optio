@@ -1,12 +1,15 @@
 # optio
 
+**Caution!** The library is under active development, and not ready for
+wide usage. It had reached meaningful (for the authors) state and has been
+publicly released.
+
 This document provides an overview of the `optio` library.
 
 # Entities
 
 The library defines two types of entities, `Option` and `Parser`. Further,
-we briefly describe classes. More detailed information is available in
-a specialized chapters.
+we briefly describe meaning of each class.
 
 ## Class Option
 
@@ -91,8 +94,8 @@ print(parser.try_get_option("-s").found())
 print(parser.try_get_option("-f").params())
 print(parser.plain_args())
 
-# repeated parsing with the same args is idempotent, strings on input are allowed.
-parser.parse_args([ "--help \t --file \n notes.txt \r -- \t\n plain"])
+# strings on the input are allowed
+parser.parse_args("--help \t --file \n notes.txt \r -- \t\n plain")
 ```
 
 Possible output:
