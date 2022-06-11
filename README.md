@@ -9,7 +9,7 @@ command-line argument parser.
 
 # Installation
 
-The library is distributed via `PyPI`. Run `pip install optio` to install.
+Run `pip install optio` to install the library from `PyPI`.
 
 # Documentation
 
