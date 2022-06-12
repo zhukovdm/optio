@@ -198,7 +198,7 @@ class OptioParser:
             raise ValueError('Unknown view ' + view + '.')
         return opt
 
-    def __gather(self, args: list[str]):
+    def __gather(self, args: list[str]) -> OptioParser:
         args = deque(args)
 
         only_plain_args = False
@@ -256,11 +256,13 @@ class OptioParser:
                 else:
                     self.__plain_args.append(arg)
 
-    def __check(self):
+        return self
+
+    def __check(self) -> OptioParser:
         for opt in self.__options:
             opt.check()
 
-        # TODO: better conflict finding
+        # TODO: improve conflict finding
 
         for opt in self.__options:
             for conflict in self.__conflicts:
@@ -276,9 +278,13 @@ class OptioParser:
             if result:
                 raise ValueError('Arguments are in conflict ' + str(conflict))
 
-    def __accept(self):
+        return self
+
+    def __accept(self) -> OptioParser:
         for opt in self.__options:
             opt.accept()
+
+        return self
 
     def parse(self, args: list[str] | str, conflicts: list[set[str]] = []) -> OptioParser:
 
@@ -301,8 +307,4 @@ class OptioParser:
             conflicts[i] = [ [ c, False ] for c in conflicts[i] ]
         self.__conflicts = conflicts
 
-        self.__gather(args)
-        self.__check()
-        self.__accept()
-
-        return self
+        return self.__gather(args).__check().__accept()
