@@ -31,7 +31,7 @@ parser = OptioParser()\
     .add_option(views={'-f', '--file'},                       count=(1, None), required=True, short_info='', long_info='')\
     .add_option(views={'-k', '--kind'}, acceptor=accept_kind, count=(1,    1), required=True, short_info='', long_info='')
 
-input = ' -c1 2 --file=1.txt 2.txt -p ~ path to folder --kind=xerox '
+input = ' -c1 2 --file=1.txt 2.txt -p ~ path to folder --kind=xerox -- -a '
 
 parser.parse(input)
 
@@ -39,3 +39,14 @@ print(parser.try_get_option('-c').value())
 print(parser.try_get_option('-p').value())
 print(parser.try_get_option('-f').value())
 print(parser.try_get_option('-k').value())
+print(parser.plain_args())
+
+'''
+Possible output:
+
+[1, 2]
+~/path/to/folder
+['1.txt', '2.txt']
+Printer xerox
+['-a']
+'''
