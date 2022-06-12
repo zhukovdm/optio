@@ -35,7 +35,7 @@ class _Option:
 
         for view in self.__views:
             if not isinstance(view, str) or not _Option.is_single_short_view(view) and not _Option.is_single_long_view(view):
-                raise ValueError('Malformed view ' + view + '.')
+                raise ValueError('Malformed view ' + str(view) + '.')
 
     def __verify_acceptor(self) -> None:
 
@@ -45,7 +45,7 @@ class _Option:
     def __verify_count(self) -> None:
 
         if (not isinstance(self.__count, tuple) or len(self.__count) != 2):
-            raise ValueError('Count parameter ' + self.__count + ' is malformed.')
+            raise ValueError('Count parameter ' + str(self.__count) + ' is malformed.')
 
         if (self.__count[0] == None): self.__count = (0, self.__count[1])
 
@@ -53,12 +53,12 @@ class _Option:
 
         if not (isinstance(self.__count[0], int) and isinstance(self.__count[1], int)) or \
             self.__count[0] < 0 or self.__count[1] < 0 or self.__count[0] > self.__count[1]:
-            raise ValueError('Count tuple ' + self.__count + ' is malformed.')
+            raise ValueError('Count tuple ' + str(self.__count) + ' is malformed.')
 
     def __verify_required(self) -> None:
 
         if not isinstance(self.__required, bool):
-            raise ValueError("Required shall be a boolean.")
+            raise ValueError('Required shall be a boolean.')
 
     def __verify_infos(self):
 
@@ -79,7 +79,9 @@ class _Option:
         for func in funcs:
             func()
 
-    def __init__(self, v: set[str], a: function, c: tuple[int | None, int | None], r: bool, s: str, l: str) -> _Option:
+    def __init__(self, v: set[str] = {}, a: function = lambda id: id,
+        c: tuple[int | None, int | None] = (1, None), r: bool = True,
+        s: str = '', l: str = '') -> _Option:
 
         self.__views = v
         self.__acceptor = a
@@ -105,28 +107,27 @@ class _Option:
     def value(self) -> any:
         return self.__value
 
-    def required(self) -> bool:
-        return self.__required
-
     def short_info(self) -> str:
         return self.__short_info
 
     def long_info(self) -> str:
         return self.__long_info
 
-    def found(self) -> bool:
+    def is_flag(self) -> bool:
+        return self.__count == (0, 0)
+
+    def is_required(self) -> bool:
+        return self.__required
+
+    def is_found(self) -> bool:
         return self.__found
 
-    def reset(self) -> None:
-        self.__value = None
-        self.__found = False
-
-    def gather(self, args: deque) -> None:
+    def gather(self, args: deque) -> _Option:
 
         self.__found = True
         if self.__value == None: self.__value = []
 
-        while args and len(self.__value) <= self.__count[1]:
+        while args and len(self.__value) < self.__count[1]:
             arg = args.popleft()
 
             if arg.startswith('-'):
@@ -135,10 +136,9 @@ class _Option:
 
             self.__value.append(arg)
 
-    def is_flag(self) -> bool:
-        return self.__count == (0, 0)
+        return self
 
-    def check(self) -> None:
+    def check(self) -> _Option:
 
         if self.__required and not self.__found:
             raise RuntimeError(str(self) + ' is required, but not found.')
@@ -147,9 +147,16 @@ class _Option:
             if not (len(self.__value) >= self.__count[0] and len(self.__value) <= self.__count[1]):
                 raise RuntimeError(str(self) + ' gathered invalid number of parameters.')
 
-    def accept(self) -> None:
-        self.__value = self.__acceptor(self.__value)
+        return self
 
+    def accept(self) -> _Option:
+        self.__value = self.__acceptor(self.__value)
+        return self
+
+    def reset(self) -> _Option:
+        self.__value = None
+        self.__found = False
+        return self
 
 class OptioParser:
 
@@ -168,14 +175,14 @@ class OptioParser:
         return self.__plain_args
 
     def add_option(self, views: set[str] = {}, acceptor: function = lambda id: id,
-        count: tuple[int | None, int | None] = (0, 0), required: bool = True,
+        count: tuple[int | None, int | None] = (1, None), required: bool = True,
         short_info: str = '', long_info: str = '') -> OptioParser:
 
         option = _Option(views, acceptor, count, required, short_info, long_info)
 
         for view in views:
             if view in self.__view2option:
-                raise RuntimeError('View ' + view + ' conflicts with ' + self.__view2option[view] + '.')
+                raise RuntimeError('View ' + str(view) + ' conflicts with ' + str(self.__view2option[view]) + '.')
             self.__view2option[view] = option
 
         self.__options.append(option)
@@ -258,7 +265,7 @@ class OptioParser:
         for opt in self.__options:
             for conflict in self.__conflicts:
                 for item in conflict:
-                    if opt.has(item[0]) and opt.found():
+                    if opt.has(item[0]) and opt.is_found():
                         item[1] = True
 
         for conflict in self.__conflicts:
@@ -267,7 +274,7 @@ class OptioParser:
                 result = result and item[1]
 
             if result:
-                raise ValueError("Arguments are in conflict " + str(conflict))
+                raise ValueError('Arguments are in conflict ' + str(conflict))
 
     def __accept(self):
         for opt in self.__options:
