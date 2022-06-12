@@ -1,7 +1,10 @@
 PROJ_DIR := optio
 DOXY_DIR := docs/doxygen
 
-.PHONY: tests docs clean
+.PHONY: all tests docs clean
+
+all:
+	echo "optio"
 
 tests:
 	python3 -m unittest discover tests/
