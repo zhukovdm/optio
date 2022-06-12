@@ -65,7 +65,7 @@ class OptioParser:
 - Accept parameters by the default or custom acceptor. After this transformed
   are converted into option `value`.
 
-For the user, all four phases are hidden in `.parse(..)` call.
+For the user, the last three phases are hidden in `.parse(..)` call.
 
 # Examples
 
