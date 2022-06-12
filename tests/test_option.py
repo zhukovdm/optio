@@ -1,105 +1,192 @@
 #!/usr/bin/env python3
 
 
+from collections import deque
 import unittest
-from optio import Option
+from optio.parser import _Option
 
 
-def int_acceptor(params: list[str]) -> list[int]:
-    return [ int(param) for param in params ]
+def accept_ints(params: list[str]) -> list[int]:
+    return [int(p) for p in params]
 
 
 class TestsOptionCtor(unittest.TestCase):
 
-    def test_WithEmptyViews(self):
-        with self.assertRaises(ValueError): Option(views={  })
+    def test_NonSetViews(self):
+        with self.assertRaises(ValueError):
+            _Option(v=None)
 
-    def test_WithBadViews(self):
-        for view in [ "", "-", "1", "a", "-1", "-ab", "--", "--a?", "--1" ]:
+    def test_EmptyViews(self):
+        with self.assertRaises(ValueError):
+            _Option(v={})
+
+    def test_MalformedViews(self):
+        for view in ['', '-', '1', 'a', '-1', '-ab', '--', '--a?', '--1', 42 ]:
             with self.subTest(view=view):
-                with self.assertRaises(ValueError):
-                    Option(views={ view })
+                with self.assertRaises(ValueError): _Option(v={view})
 
-    def test_WithBadAcceptor(self):
+    def test_NonCallableAcceptor(self):
         with self.assertRaises(ValueError):
-            Option({ "-h" }, acceptor=None)
+            _Option(v={'-h'}, a=None)
 
-    def test_WithBadRequired(self):
+    def test_NonTupleCount(self):
         with self.assertRaises(ValueError):
-            Option({ "-h" }, required=None)
+            _Option({'-h'}, c=1)
 
-    def test_WithBadInfos(self):
+    def test_BadLengthCount(self):
+        with self.assertRaises(ValueError):
+            _Option({'-h'}, c=(1, 2, 3))
+
+    def test_InverseIntervalCount(self):
+        with self.assertRaises(ValueError):
+            _Option({'-h'}, c=(2, 1))
+
+    def test_NonIntegerCount(self):
+        with self.assertRaises(ValueError):
+            _Option({'-h'}, c=('1', 2))
+
+    def test_MalformedRequired(self):
+        with self.assertRaises(ValueError):
+            _Option({'-h'}, r=None)
+
+    def test_MalformedInfos(self):
+
         for info in [ None, 1 ]:
+
             with self.subTest(info=info):
                 with self.assertRaises(ValueError):
-                    Option({ "-h" }, short_info=info)
+                    _Option({'-h'}, s=info)
+
             with self.subTest(info=info):
                 with self.assertRaises(ValueError):
-                    Option({ "-h" }, long_info=info)
+                    _Option({'-h'}, l=info)
 
-    def test_WithShortViewAndAcceptor(self):
-        Option({ "-h" }, int_acceptor)
+    def test_ShortViewAndAcceptor(self):
+        _Option({'-h'}, accept_ints)
 
-    def test_WithLongViewAndAcceptor(self):
-        Option({ "--help" }, int_acceptor)
+    def test_LongViewAndAcceptor(self):
+        _Option({'--help'}, accept_ints)
+
+class TestsOptionStr(unittest.TestCase):
+
+    def test_Str(self):
+        self.assertEqual(str(_Option(v={'-h'})), 'Option {\'-h\'}')
+
+class TestsOptionViews(unittest.TestCase):
+
+    def test_ViewsGetter(self):
+        self.assertEqual(_Option(v={'-c', '-h'}).views(), {'-c', '-h'})
+
+class TestsOptionHas(unittest.TestCase):
+
+    def test_HasView(self):
+        self.assertTrue(_Option(v={'-c', '-h'}).has('-h'))
+
+    def test_HasNotView(self):
+        self.assertFalse(_Option(v={'-h'}).has('-c'))
+
+class TestsOptionValue(unittest.TestCase):
+
+    def test_DefaultValue(self):
+        self.assertIsNone(_Option({'-h'}).value())
+
+    def test_GatheredValue(self):
+        option = _Option({'-h'}, accept_ints).gather(deque(['1', '2']))
+        self.assertListEqual(option.value(), ['1', '2'])
+
+    def test_AcceptedValue(self):
+        option = _Option({'-h'}, accept_ints).gather(deque(['1', '2'])).accept()
+        self.assertListEqual(option.value(), [1, 2])
+
+class TestOptionInfo(unittest.TestCase):
+
+    def test_GetShortInfo(self):
+        self.assertEqual(_Option({'-h'}, s='s').short_info(), 's')
+
+    def test_GetLongInfo(self):
+        self.assertEqual(_Option({'-h'}, s='l').short_info(), 'l')
+
+class TestOptionIsFlag(unittest.TestCase):
+
+    def test_DefaultIsFlag(self):
+        self.assertFalse(_Option({'-h'}).is_flag())
+
+    def test_IsNotFlag(self):
+        self.assertFalse(_Option({'-h'}, c=(1, None)).is_flag())
+
+    def test_IsFlag(self):
+        self.assertTrue(_Option({'-h'}, c=(0, 0)).is_flag())
+
+class TestOptionIsRequired(unittest.TestCase):
+
+    def test_DefaultIsRequired(self):
+        self.assertTrue(_Option({'-a'}).is_required())
+
+    def test_IsNotRequired(self):
+        self.assertFalse(_Option({'-v'}, r=False).is_required())
+
+class TestOptionIsFound(unittest.TestCase):
+
+    def test_IsNotFound(self):
+        self.assertFalse(_Option({'-a'}).is_found())
+
+    def test_IsFound(self):
+        self.assertTrue(_Option({'-a'}).gather(deque(['1'])).is_found())
+
+class TestOptionGather(unittest.TestCase):
+
+    def test_EmptyDeque(self):
+        self.assertListEqual(_Option({'-a'}).gather(deque([])).value(), [])
+
+    def test_FullRemainRest(self):
+        d = deque(['1', '2', '3'])
+        o = _Option({'-a'}, c=(1, 2)).gather(d)
+        self.assertListEqual(o.value(), ['1', '2'])
+        self.assertListEqual(list(d), ['3'])
+
+    def test_BelowLowerBound(self):
+        self.assertListEqual(_Option({'-a'}, c=(3, None)).gather(deque(['1', '2'])).value(), ['1', '2'])
+
+    def test_HitOption(self):
+        d = deque(['1', '-2', '3'])
+        o = _Option({'-a'}, c=(1, 2)).gather(d)
+        self.assertListEqual(o.value(), ['1'])
+        self.assertListEqual(list(d), ['-2', '3'])
+    
+    def test_SeveralCalls(self):
+        self.assertListEqual(_Option({'-a'}).gather(deque(['1'])).gather(deque(['2'])).value(), ['1', '2'])
+
+class TestOptionCheck(unittest.TestCase):
+
+    def test_IsRequiredIsNotFound(self):
+        with self.assertRaises(RuntimeError):
+            _Option({'-h'}).check()
+
+    def test_IsRequiredIsFound(self):
+        _Option({'-h'}).gather(deque(['1'])).check()
+
+    def test_IsFoundLessParams(self):
+        with self.assertRaises(RuntimeError):
+            _Option({'-h'}, c=(2, None)).gather(deque(['1'])).check()
+
+class TestOptionAccept(unittest.TestCase):
 
     def test_DefaultAcceptor(self):
-        option = Option({ "-h" })
-        option.accept([ 42, "1" ])
-        self.assertListEqual(option.params(), [ 42, "1" ])
+        option = _Option({'-h'}).gather(deque(['42', '1'])).accept()
+        self.assertListEqual(option.value(), ['42', '1'])
 
     def test_CustomAcceptorSuccess(self):
-        option = Option({ "-h" }, int_acceptor)
-        option.accept([ "42" ])
-        self.assertListEqual(option.params(), [ 42 ])
+        option = _Option({'-h'}, accept_ints).gather(deque(['42'])).accept()
+        self.assertListEqual(option.value(), [42])
 
     def test_CustomAcceptorFail(self):
         with self.assertRaises(ValueError):
-            Option({ "-h" }, int_acceptor).accept([ "?" ])
+            _Option({'-h'}, accept_ints).gather(deque(['?'])).accept()
 
-    def test_RepeatedAcceptCall(self):
-        option = Option({ "-h" }, int_acceptor)
-        option.accept([ "1" ])
-        with self.assertRaises(ValueError):
-            option.accept([ "1" ])
+class TestOptionReset(unittest.TestCase):
 
-    def test_ResetAfterAccept(self):
-        option = Option({ "-h" }, int_acceptor)
-        option.accept([ "1" ])
-        option.reset()
-        self.assertTrue(not option.found() and option.params() == None)
+    def test_ValueAfterReset(self):
+        self.assertIsNone(_Option({'-a'}, accept_ints).gather(deque(['1'])).accept().reset().value())
 
-    def test_RepeatedAcceptCallAfterReset(self):
-        option = Option({ "-h" }, int_acceptor)
-        option.accept([ "1" ])
-        option.reset()
-        option.accept([ "2" ])
-        self.assertListEqual(option.params(), [ 2 ])
-        self.assertTrue(option.found())
-
-    def test_StrMagicMethod(self):
-        self.assertEqual(str(Option(views={ "-h" })), "Option {'-h'}")
-
-    def test_Views(self):
-        self.assertEqual(Option(views={ "-h", "--help" }).views(), { "-h", "--help" })
-
-    def test_Required(self):
-        self.assertTrue(Option(views={ "-h" }, required=True).required())
-
-    def test_Found(self):
-        option = Option(views={ "-h" })
-        option.accept([ "-h" ])
-        self.assertTrue(option.found())
-
-    def test_HasView(self):
-        self.assertTrue(Option(views={ "-h" }).has_view("-h"))
-
-    def test_HasNotView(self):
-        self.assertFalse(Option(views={ "-h" }).has_view("-a"))
-
-    def test_SelfCheckRequiredNotFound(self):
-        with self.assertRaises(RuntimeError):
-            Option({ "-a", "-h" }, required=True).self_check()
-
-    def test_SelfCheckRequiredAndFound(self):
-        Option({ "-a" }, required=True).accept([ "-a" ]).self_check()
+    def test_IsFoundAfterReset(self):
+        self.assertFalse(_Option({'-a'}, accept_ints).gather(deque(['1'])).accept().reset().is_found())
