@@ -9,7 +9,8 @@ command-line argument parser.
 
 # Installation
 
-Run `pip install optio` to install the library from `PyPI`.
+Run `pip install optio` to install the latest version of the library from
+[PyPI](https://pypi.org/project/optio/).
 
 # Documentation
 
