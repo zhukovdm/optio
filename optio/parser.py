@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 from collections import deque
-from collections.abc import Iterable
 import itertools
 import re
 import sys
@@ -28,8 +27,8 @@ class _Option:
 
     def __verify_views(self) -> None:
 
-        if not isinstance(self.__views, Iterable):
-            raise ValueError('Views container is not an Iterable.')
+        if not isinstance(self.__views, set):
+            raise ValueError('Views container is not a set.')
 
         if len(self.__views) == 0:
             raise ValueError('Views container is empty.')
@@ -168,7 +167,7 @@ class OptioParser:
     def plain_args(self) -> list[str]:
         return self.__plain_args
 
-    def add_option(self, views: set[str], acceptor: function = lambda id: id,
+    def add_option(self, views: set[str] = {}, acceptor: function = lambda id: id,
         count: tuple[int | None, int | None] = (0, 0), required: bool = True,
         short_info: str = '', long_info: str = '') -> OptioParser:
 
