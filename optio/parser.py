@@ -158,6 +158,7 @@ class _Option:
         self.__found = False
         return self
 
+
 class OptioParser:
 
     def __init__(self) -> OptioParser:
@@ -218,17 +219,25 @@ class OptioParser:
                     opt = None
 
                     if arg.startswith('--'):
-                        pos = arg.find('=')
 
-                        view = arg[:pos]
-                        param = arg[pos + 1:]
+                        if _Option.is_single_long_view(arg):
+                            opt = self.__get_option(arg)
 
-                        if len(param) > 0: args.appendleft(param)
+                        else:
+                            view = ''
+                            param = ''
 
-                        if not _Option.is_single_long_view(view):
-                            raise ValueError('Malformed long view ' + view + '.')
+                            if '=' in arg:
+                                pos = arg.find('=')
+                                view = arg[:pos]
+                                param = arg[pos + 1:]
 
-                        opt = self.__get_option(view)
+                            if len(param) > 0: args.appendleft(param)
+
+                            if not _Option.is_single_long_view(view):
+                                raise ValueError('Malformed long view ' + view + '.')
+
+                            opt = self.__get_option(view)
 
                     else:
                         if arg == '-' or not arg[1].isalpha():
