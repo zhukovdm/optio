@@ -1,109 +1,104 @@
-# optio
+`optio` is a simple, yet configurable command-line argument parser.
 
-**Caution!** The library is under active development, and not ready for
-wide usage. It had reached meaningful (for the authors) state and has been
-publicly released.
+# Definitions
 
-This document provides an overview of the `optio` library.
+Let us define entities recognized by the parser.
 
-# Entities
+`short view` is a sequence of chars starting with `-` and followed by a letter,
+e.g. `-v`.
 
-The library defines two types of entities, `Option` and `Parser`. Further,
-we briefly describe meaning of each class.
+`long view` is a sequence of chars starting with `--` followed by a letter
+followed by a sequence (maybe empty) of alphanumeric chars, e.g. `--v3rb0se`.
 
-## Class Option
+`view` is either a `short view` or `long view`. This implies a valid `view`
+starts with `-`. Any `view` shall be associated with some `option`.
 
-Constructor of the class `Option` is used for configuring `Parser` instances.
-It takes five arguments in total.
+`parameter` is a string token followed after a view associated with an option.
 
-```python
-def __init__(views:self, views: set[str], acceptor: function = lambda id: id,
-    required: bool = True, short_info: str = "", long_info: str = "") -> Option:
-```
+`option` is a program abstraction used for parser configuration.
 
-`views` are represented by a set of synonyms associated with the `Option`,
-such as `{ "-a", "-b", "--option" }`. During parsing, the `Option` will be
-identified by any synonym from the set. Different `Options` cannot have
-common `views`.
+`plain argument` is any string token not beginning with `-` if delimiter has
+not been encountered, or any string token after delimiter.
 
-Parsing options with list of parameters might be necessary. However, requirements
-on such list could vary and any parsing strategy could hardly cover all use cases.
-Therefore, we use another approach.
+`delimiter` is a `--` sequence, after which only `plain arguments` could be
+encountered.
 
-Constructor parameter `acceptor` is any function taking list of parsed parameters
-as an argument. `acceptor` could return any object, which will be stored as a
-private member of `Option` instance and could be retrieved later upon calling
-method `.params()`.
+# OptioParser
 
-`required` options shall appear within the arguments. Otherwise, violation is
-reported via exception.
+`OptioParser` is a central parsing unit configurable by `.add_option(..)` method.
+Only this class is imported upon `from optio import *`.
 
-Both `short_info` and `long_info` could be used for documentation.
+Internally, parsing is divided into the following phases.
 
-`Option` instances have `.views()`, `.params()` , `.required()`, `.found()`,
-`.short_info()`, `.long_info()`, `.accept(params: list[str])`,
-`.has_view(view: str)`, `.self_check()` and `.reset()`.
-
-## Class Parser
-
-Essentially `Parser` is a bag of `Options`, new options are added via
-constructor or by calling `.add_option()`. Each `Option` is checked whether
-is not in conflict with already added.
-
-Once all options are added, we should call
-`.parse_args(args: list[str], conflicts: list[str] = [])`. Conflicts are sets
-of `views` not allowed to appear in the same argument structure. Once parsing
-is finished, we may query structure by calling `.options()`, `.plain_args()`,
-`.add_option(in_opt: Option)`, `.try_get_option(view: str)`, and `.parse_args(...)`
-methods.
-
-## Use cases
+- Configure expected options by calling `.add_option()` with appropriate parameters.
+  - `views` is a set of acceptable short and long synonyms, e.g. `-h` or `--help`.
+    Two different options must not have `views` in common, collision is reported
+    via exception.
+  - `acceptor` is a __function__ accepting gathered parameters, e.g. `-h 1 2 3`.
+    - `acceptor` is provided by the user of the library to ensure specific behavior.
+    - `acceptor` could return any object or do any action, further interaction with
+      such object is a responsibility of the user.
+  - `count` is a tuple containing two items, `parameters at least` and `parameters at most`.
+    - `(0, 0)` is a parameterless flag,
+    - `(1, None)` is an option with at least one parameter and __without__ upper bound.
+    - `(2, 4)` is an option with any number of parameters from interval `[2, 3, 4]`.
+    - `(None, None)` is an option with unbounded parameter count, any number from `0` to `Inf`.
+  - `required` is a flag signalizing if an option shall appear in the arguments.
+  - `short_info` is a concise description of an option.
+  - `long_info` is a long piece of text describing an option.
 
 ```python
-#!/usr/bin/env python3
-
-
-from __future__ import annotations
-from parse import Option, Parser
-
-
-def int_acceptor(params: list[str] = []) -> list[int]:
-    return [ int(param) for param in params ]
-
-
-option = Option(
-    views={ "-a", "-b", "-c", "--help" },
-    acceptor=int_acceptor,
-    required=True,
-    short_info="short info",
-    long_info="long info"
-)
-
-option.accept([ "42" ])
-print(option)
-print(option.params())
-
-
-parser = Parser([ Option(views={ "-f", "--file" }) ])\
-    .add_option(Option(views={ "-h", "--help" }))\
-    .add_option(Option(views={ "-s", "--secret" }, required=False))
-
-parser.parse_args([ "--help", "--file", "notes.txt", "--", "plain"])
-
-print(parser.try_get_option("-s").found())
-print(parser.try_get_option("-f").params())
-print(parser.plain_args())
-
-# strings on the input are allowed
-parser.parse_args("--help \t --file \n notes.txt \r -- \t\n plain")
+class OptioParser:
+    def add_option(self, views: set[str] = {}, acceptor: function = lambda id: id,
+        count: tuple[int | None, int | None] = (1, None), required: bool = True,
+        short_info: str = '', long_info: str = '') -> OptioParser:
 ```
 
-Possible output:
+- Recognize views of the configured options and gather parameters into lists.
+  Gathering is eager towards option parameters. Consider option `-c` configured
+  with count `(1, 2)` and input `-c 1 2 3`. Only the last parameter will be
+  recognized as plain argument, other will be recognized as parameters of `-c`.
+  In other words, options consume as many parameters as it possibly could.
+
+- Check if configured constraints are fulfilled (parameter count, required/found).
+
+- Accept parameters by the default or custom acceptor. After this transformed
+  are converted into option `value`.
+
+For the user, all four phases are hidden in `.parse(..)` call.
+
+# Examples
+
+```python
+#!/bin/
+
+import sys
+from optio import *
+
+parser = OptioParser()\
+    .add_option({'-a'}, count=(1, 1))\
+    .add_option({'-b'}, count=(0, 0))\
+    .add_option({'-c'}, count=(None, None))\
+    .add_option({'-d'})\
+    .add_option({'--file'})\
+    .parse(sys.args[1:])
+```
 
 ```console
-Option {'-a', '-b', '-c', '--help'}
-[42]
-False
-['notes.txt']
-['plain']
+./program -a 1 2 -bc 3 4 -d5 --file 1.txt 2.txt --file=3.txt -- -h
 ```
+
+Considering parser and arguments mentioned above, the following entities are
+recognized:
+
+- `-a` option with exactly one parameter `1`.
+- `-b` parameterless (flag) option.
+- `-c` option with unbound amount of parameters, currently `3` and `4`.
+- `-d` option with at least one parameter, currently `5`.
+- `--file` with at least one parameter, currently `[1.txt, 2.txt, 3.txt]`.
+- plain arguments are represented by the list `['2', '-h']`.
+
+Other more detailed examples can be found at
+[optio/examples](https://github.com/zhukovdm/optio/tree/main/examples). To run
+`printer.py`, clone the repository and execute `python3 -m examples.printer`
+from the project root folder.
