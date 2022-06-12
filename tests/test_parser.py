@@ -2,236 +2,257 @@
 
 
 import unittest
-from optio import Option, Parser
+from optio import *
 
 
-def int_acceptor(params: list[str]) -> list[int]:
-    return [ int(param) for param in params ]
+def accept_ints(params: list[str]) -> list[int]:
+    return [ int(p) for p in params ]
 
 
-def ignore_acceptor(params: list[str]) -> None:
+def accept_ignore(_: list[str]) -> None:
     return None
 
 
-def text_files_acceptor(params: list[str]):
+def accept_txt_files(params: list[str]) -> None:
     for p in params:
         if not p.endswith('.txt'):
             raise Exception('Output file must be .txt file')
+    return params
 
 
-class TestsParser(unittest.TestCase):
+class TestsOptioParserOptions(unittest.TestCase):
+
+    def test_Default(self):
+        self.assertEqual(OptioParser().options(), [])
+
+    def test_OneItem(self):
+        self.assertEqual(OptioParser().add_option({'-v'}).options()[0].views(), {'-v'})
+
+class TestOptioParserPlainArgs(unittest.TestCase):
+
+    def test_Default(self):
+        self.assertEqual(OptioParser().plain_args(), [])
+
+    def test_NonEmpty(self):
+        self.assertEqual(OptioParser().parse(' x ').plain_args(), ['x'])
+
+    def test_AfterOption(self):
+        self.assertEqual(OptioParser().add_option({'-a'}, count=(1, 1)).parse(' -a 1 x ').plain_args(), ['x'])
+
+    def test_BeforeOption(self):
+        self.assertEqual(OptioParser().add_option({'-a'}, count=(1, 1)).parse(' x -a 1').plain_args(), ['x'])
+
+    def test_BeforeAfterOption(self):
+        self.assertEqual(OptioParser().add_option({'-a'}, count=(1, 1)).parse(' x -a 1 x ').plain_args(), ['x', 'x'])
+
+    def test_EagerOptionGather(self):
+        self.assertEqual(OptioParser().add_option({'-a'}).parse(' -a 1 2 ').plain_args(), [])
+
+    def test_SeveralArgs(self):
+        self.assertEqual(OptioParser().add_option({'-a'}, required=False).parse(' 1 2 ').plain_args(), ['1', '2'])
+
+    def test_AfterDelimiter(self):
+        args = OptioParser()\
+            .add_option({'-a'}, required=False)\
+            .add_option({'--help'}, required=False)\
+            .parse(' -- -a --help x ')\
+            .plain_args()
+        self.assertListEqual(args, ['-a', '--help', 'x'])
+
+class TestsOptioAddOption(unittest.TestCase):
 
     def test_AddOptionTwice(self):
-        option = Option({ "-h", "--help" })
         with self.assertRaises(RuntimeError):
-            Parser().add_option(option).add_option(option)
+            OptioParser().add_option({'-h', '--help'}).add_option({'-h', '--help'})
 
     def test_AddOptionRepeatedShortView(self):
-        option1 = Option({ "-h", "-p", "--help" })
-        option2 = Option({ "-p", "-r", "--print" })
         with self.assertRaises(RuntimeError):
-            Parser().add_option(option1).add_option(option2)
+            OptioParser().add_option({'-h', '-p', '--help'}).add_option({'-p', '-r', '--print'})
 
     def test_AddOptionRepeatedLongView(self):
-        option1 = Option({ "-h", "--help", "--dup" })
-        option2 = Option({ "-p", "--print", "--dup" })
         with self.assertRaises(Exception):
-            Parser().add_option(option1).add_option(option2)
+            OptioParser().add_option({'-h', '--help', '--dup'}).add_option({'-p', '--print', '--dup'})
 
-    def test_CtorAddOptionTwice(self):
-        option = Option({ "-h", "--help" })
-        with self.assertRaises(RuntimeError):
-            Parser([ option, option ])
+    def test_AddSeveralOptions(self):
+        self.assertEqual(len(OptioParser().add_option({'-h'}).add_option({'-a'}).options()), 2)
 
-    def test_CtorAddOptionRepeatedShortView(self):
-        option1 = Option({ "-h", "-p", "--help" })
-        option2 = Option({ "-p", "-r", "--print" })
-        with self.assertRaises(RuntimeError):
-            Parser([ option1, option2 ])
+class TestsOptioParserTryGetOption(unittest.TestCase):
 
-    def test_CtorAddOptionRepeatedLongView(self):
-        option1 = Option({ "-h", "--help", "--dup" })
-        option2 = Option({ "-p", "--print", "--dup" })
-        with self.assertRaises(Exception):
-            Parser([ option1, option2 ])
+    def test_GetExistingOption(self):
+        self.assertIsNotNone(OptioParser().add_option({'-h', '-a'}).try_get_option('-a'))
 
-    def test_ParseArgsUnknownShortView(self):
-        with self.assertRaises(Exception):
-            Parser().parse_args([ "-u" ])
+    def test_GetNonExistingOption(self):
+        self.assertIsNone(OptioParser().add_option({'-h', '-a'}).try_get_option('-m'))
 
-    def test_ParseArgsUnknownLongView(self):
-        with self.assertRaises(Exception):
-            Parser().parse_args([ "--unknown" ])
+class TestsOptioParserParse(unittest.TestCase):
 
-    def test_TryGetOptionBeforeParsing(self):
-        self.assertEqual(Parser().try_get_option("-h"), None)
+    def test_UnknownView(self):
+        with self.assertRaises(ValueError):
+            OptioParser().parse(['-u'])
 
-    def test_TryGetShortOptionAfterParsing(self):
-        option = Parser([ Option({ "-h", "--help" }) ])\
-            .parse_args([ "-h" ])\
-            .try_get_option("-h")
-        self.assertEqual(isinstance(option,Option), option.found())
+    def test_TryGetShortOptionAfterParse(self):
+        option = OptioParser()\
+            .add_option({'-h'}, count=(0, 0))\
+            .parse(' -h ')\
+            .try_get_option('-h')
+        self.assertIsNotNone(option)
 
     def test_TryGetLongOptionAfterParsing(self):
-        option = Parser([ Option({ "-h", "--help" }) ])\
-            .parse_args([ "--help" ])\
-            .try_get_option("--help")
-        self.assertEqual(isinstance(option,Option), option.found())
+        option = OptioParser()\
+            .add_option({'--help'}, count=(0, 0))\
+            .parse(['--help'])\
+            .try_get_option('--help')
+        self.assertIsNotNone(option)
 
-    def test_TryGetWrongOptionAfterParsing(self):
-        option = Parser([ Option({ "-h", "--help" }) ])\
-            .parse_args([ "--help" ])\
-            .try_get_option("-help")
-        self.assertIsNone(option)
+    def test_TryGetOptionBySynonym(self):
+        option = OptioParser()\
+            .add_option({'-a', '-h'}, count=(0, 0))\
+            .parse(['-a'])\
+            .try_get_option('-h')
+        self.assertIsNotNone(option)
 
-    def test_TryGetShortSynonymShortOption(self):
-        option = Parser([ Option({ "-h", "-a" }) ])\
-            .parse_args([ "-h", "arg1", "arg2"])\
-            .try_get_option("-a")
-        self.assertTrue(option.found())
+    def test_OptionAfterDelimiterNotFound(self):
+        option = OptioParser()\
+            .add_option({'-h'}, required=False)\
+            .parse(['--', '-h'])\
+            .try_get_option('-h')
+        self.assertFalse(option.is_found())
 
-    def test_TryGetLongSynonymShortOption(self):
-        option = Parser([ Option({ "-h", "--all" }) ])\
-            .parse_args([ "-h", "arg1", "arg2"])\
-            .try_get_option("--all")
-        self.assertTrue(option.found())
-
-    def test_TryGetShortSynonymLongOption(self):
-        option = Parser([ Option({ "-h", "--all" }) ])\
-            .parse_args([ "--all", "arg1", "arg2"])\
-            .try_get_option("-h")
-        self.assertTrue(option.found())
-
-    def test_TryGetLongSynonymLongOption(self):
-        option = Parser([ Option({ "--help", "--all" }) ])\
-            .parse_args([ "--all", "arg1", "arg2"])\
-            .try_get_option("--help")
-        self.assertTrue(option.found())
-
-    def test_ShortOptionAfterDelimiterNotFound(self):
-        option = Parser([ Option({ "-h", "--help" }, required=False) ])\
-            .parse_args([ "--", "-h" ])\
-            .try_get_option("-h")
-        self.assertFalse(option.found())
-
-    def test_LongOptionAfterDelimiterNotFound(self):
-        option = Parser([ Option({ "-h", "--help" }, required=False) ])\
-            .parse_args([ "--", "--help" ])\
-            .try_get_option("--help")
-        self.assertFalse(option.found())
-
-    def test_GetPlainArgs(self):
-        args = Parser()\
-            .parse_args([ "plain", "arguments" ])\
+    def test_ShortViewAsPlainArgument(self):
+        args = OptioParser()\
+            .add_option({'-h'}, required=False)\
+            .parse(['--', '-h'])\
             .plain_args()
-        self.assertEqual(args, [ "plain", "arguments" ])
+        self.assertEqual(args, ['-h'])
 
-    def test_GetShortViewAsPlainArgument(self):
-        args = Parser()\
-            .add_option(Option({ "-h" }, required=False))\
-            .parse_args([ "--", "-h" ])\
-            .plain_args()
-        self.assertEqual(args, [ "-h" ])
+    def test_ParseWithDefaultAcceptor(self):
+        value = OptioParser()\
+            .add_option({'-a'}, required=False)\
+            .parse(['-a', '1'])\
+            .try_get_option('-a')\
+            .value()
+        self.assertListEqual(value, ['1'])
 
-    def test_GetLongViewAsPlainArgument(self):
-        args = Parser()\
-            .add_option(Option({ "--help" }, required=False))\
-            .parse_args([ "--", "--help" ])\
-            .plain_args()
-        self.assertEqual(args, [ "--help" ])
+    def test_ParseWithIntAcceptor(self):
+        value = OptioParser()\
+            .add_option({'-a'}, accept_ints)\
+            .parse(['-a', '1'])\
+            .try_get_option('-a')\
+            .value()
+        self.assertListEqual(value, [1])
 
-    def test_GetPlainArgumentsStartsWithPlain(self):
-        args = Parser()\
-            .add_option(Option({ "-h" }, required=False))\
-            .add_option(Option({ "--help" }, required=False))\
-            .parse_args([ "plain", "-h", "--help" ])\
-            .plain_args()
-        self.assertEqual(args, [ "plain", "-h", "--help" ])
-
-    def test_ParseShortViewWithParamsDefaultAcceptor(self):
-        params = Parser()\
-            .add_option(Option({ "-a" }, required=False))\
-            .parse_args([ "-a", "1" ])\
-            .try_get_option("-a")\
-            .params()
-        self.assertListEqual(params, [ "1" ])
-
-    def test_ParseShortViewWithParamsIntAcceptor(self):
-        params = Parser()\
-            .add_option(Option({ "-a" }, int_acceptor, False))\
-            .parse_args([ "-a", "1" ])\
-            .try_get_option("-a")\
-            .params()
-        self.assertListEqual(params, [ 1 ])
-
-    def test_OptionSelfCheckRequiredNotFound(self):
-        parser = Parser()\
-            .add_option(Option({ "-a" }))\
-            .add_option(Option({ "-b" }))
+    def test_IsRequiredIsNotFound(self):
         with self.assertRaises(RuntimeError):
-            parser.parse_args([ "-b" ])
+            OptioParser()\
+                .add_option({'-a'})\
+                .add_option({'-b'})\
+                .parse(['-b'])
 
-    def test_ParseParamsWithIgnoringAcceptor(self):
-        params = Parser()\
-            .add_option(Option({ "-h" }, ignore_acceptor))\
-            .parse_args([ "-h", "10" ])\
-            .try_get_option("-h")\
-            .params()
-        self.assertIsNone(params)
+    def test_CondensedShortOptions(self):
+        parser = OptioParser()\
+            .add_option({'-a'}, count=(0, 0))\
+            .add_option({'-b'}, count=(0, 0))\
+            .add_option({'-c'}, count=(0, 0))\
+            .parse('-abc')
+        self.assertTrue(parser.try_get_option('-a').is_found() and\
+            parser.try_get_option('-b').is_found() and\
+            parser.try_get_option('-c').is_found())
 
-    def test_ParseBadShortView(self):
+    def test_ShortOptionWithParameter(self):
+        value = OptioParser()\
+            .add_option({'-a'}, accept_ints)\
+            .parse('-a1')\
+            .try_get_option('-a')\
+            .value()
+        self.assertListEqual(value, [1])
+
+    def test_ShortParameterlessOptionThenParametrizedOption(self):
+        value = OptioParser()\
+            .add_option({'-a'}, count=(0, 0))\
+            .add_option({'-b'})\
+            .parse('-ab1')\
+            .try_get_option('-b')\
+            .value()
+        self.assertListEqual(value, ['1'])
+
+    def test_LongOptionWithoutEquality(self):
+        value = OptioParser()\
+            .add_option({'-f', '--file'}, accept_ints)\
+            .parse(' --file 1 2 3 ')\
+            .try_get_option('-f')\
+            .value()
+        self.assertListEqual(value, [1, 2, 3])
+
+    def test_LongOptionWithEquality(self):
+        value = OptioParser()\
+            .add_option({'-f', '--file'}, accept_ints)\
+            .parse(' --file=1 2 3 ')\
+            .try_get_option('-f')\
+            .value()
+        self.assertListEqual(value, [1, 2, 3])
+
+    def test_LongOptionWithRepeatedEquality(self):
+        value = OptioParser()\
+            .add_option({'-f', '--file'})\
+            .parse(' --file=1=2=3 ')\
+            .try_get_option('-f')\
+            .value()
+        self.assertListEqual(value, ['1=2=3'])
+
+    def test_ParameterlessLongOptionWithEquality(self):
+        value = OptioParser()\
+            .add_option({'-f', '--file'}, count=(None, None))\
+            .parse(' --file= ')\
+            .try_get_option('-f')\
+            .value()
+        self.assertListEqual(value, [])
+
+    def test_InputWithWhiteChars(self):
+        parser = OptioParser()\
+            .add_option({'-m'}, count=(0, 0))\
+            .add_option({'--memset'}, count=(0, 0))\
+            .parse("  \t \t -m \t \r --memset \n \n  ")
+        self.assertTrue(parser.try_get_option('-m').is_found()\
+                    and parser.try_get_option('--memset').is_found())
+
+    def test_RepeatedParsingFlags(self):
+        parser = OptioParser()\
+            .add_option({'-a'}, count=(0, 0), required=False)\
+            .add_option({'-b'}, count=(0, 0), required=False)
+
+        self.assertFalse(parser.parse('-a').parse('-b').try_get_option('-a').is_found())
+
+    def test_RepeatedParsingWithParameters(self):
+        parser = OptioParser()\
+            .add_option({'-a'}, count=(1, 1), required=False)\
+            .add_option({'-b'}, count=(1, 1), required=False)
+
+        self.assertEqual(parser.parse('-a1').parse('-b2').try_get_option('-a').value(), None)
+
+    def test_ParseConflictSingle(self):
         with self.assertRaises(ValueError):
-            Parser()\
-                .add_option(Option({ "-a" }))\
-                .parse_args([ "-a", "-?" ])
-
-    def test_ParseNonExistentView(self):
-        with self.assertRaises(ValueError):
-            Parser()\
-                .add_option(Option({ "-a" }))\
-                .parse_args([ "-b" ])
-
-    def test_ParseStringOnInput(self):
-        parser = Parser()\
-            .add_option(Option({ "-a" }))\
-            .add_option(Option({ "--memset" }))\
-            .parse_args("  \t\t -a \t \r --memset \n\n  ")
-        self.assertTrue(parser.try_get_option("-a").found()\
-                    and parser.try_get_option("--memset").found())
+            OptioParser()\
+                .add_option({'-a', '-b'}, count=(0, 0))\
+                .parse(args=['-a', '-b'], conflicts=[{'-a', '-b'}])
 
     def test_ParseConflictPair(self):
         with self.assertRaises(ValueError):
-            Parser()\
-                .add_option(Option({ "-a" }))\
-                .add_option(Option({ "-b" }))\
-                .parse_args(args=[ "-a", "-b" ], conflicts=[{ "-a", "-b" }])
+            OptioParser()\
+                .add_option({'-a'}, count=(0, 0))\
+                .add_option({'-b'}, count=(0, 0))\
+                .parse(args=['-a', '-b'], conflicts=[{'-a', '-b'}])
 
     def test_ParseConflictTriple(self):
         with self.assertRaises(ValueError):
-            Parser()\
-                .add_option(Option({ "-a" }))\
-                .add_option(Option({ "-b" }))\
-                .add_option(Option({ "-c" }))\
-                .parse_args(args=[ "-a", "-b", "-c" ], conflicts=[{ "-a", "-b", "-c" }])
+            OptioParser()\
+                .add_option({'-a'}, count=(0, 0))\
+                .add_option({'-b'}, count=(0, 0))\
+                .add_option({'-c'}, count=(0, 0))\
+                .parse(args=['-a', '-b', '-c'], conflicts=[{'-a', '-b', '-c'}])
 
-    def test_ParseHasOptionCorrectArgs(self):
-        option = Parser()\
-            .add_option(Option({'-v', '--verbose'}))\
-            .add_option(Option({'-o', '--output'}, text_files_acceptor))\
-            .parse_args(['-v', '--output', 'file.txt'])\
-            .try_get_option('-v')
-        self.assertEqual(isinstance(option,Option), option.found())
-
-    def test_ParsingIsIdempotent(self):
-        parser = Parser()\
-            .add_option(Option({ '-v', '--version' }))\
-            .add_option(Option({ '-h', '--help' }))
-        parser.parse_args(['-v', '1', '-h', '2'])
-        self.assertListEqual(parser.try_get_option('--version').params(), ['1'])
-        parser.parse_args(['-v', '1', '-h', '2'])
-        self.assertListEqual(parser.try_get_option('--help').params(), ['2'])
-
-    def test_GetDefaultParams(self):
-        parser = Parser()\
-            .add_option(Option({ '-v' }))
-        self.assertEqual(parser.try_get_option('-v').params(), None)
+    def test_ParseConflictSynonyms(self):
+        with self.assertRaises(ValueError):
+            OptioParser()\
+                .add_option({'-a', '-b'}, count=(0, 0))\
+                .add_option({'-c', '-d'}, count=(0, 0))\
+                .parse(args=['-a', '-c'], conflicts=[{'-b', '-d'}])
